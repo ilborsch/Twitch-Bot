@@ -11,7 +11,7 @@ from config import (TMI_TOKEN, CLIENT_ID, BOT_NAME, BOT_PREFIX,
 
 class Bot(commands.Bot):
     """
-        DEPLOYED ON Heroku.com
+        DEPLOYED ON PythonAnywhere.com
     """
     def __init__(self):
         super().__init__(
