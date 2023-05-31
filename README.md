@@ -1,4 +1,4 @@
-# Twitch Bot - Lina
+# Twitch Bot for Dota 2 streamers - Lina
 
 <p align="center">
     <img src="https://img.shields.io/badge/TwitchIO%20v.-2.6.0-brightgreen" alt="TwitchIO version">
