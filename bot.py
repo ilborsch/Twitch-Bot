@@ -10,6 +10,9 @@ from config import (TMI_TOKEN, CLIENT_ID, BOT_NAME, BOT_PREFIX,
 
 
 class Bot(commands.Bot):
+    """
+        DEPLOYED ON Heroku.com
+    """
     def __init__(self):
         super().__init__(
             token=TMI_TOKEN,
@@ -48,7 +51,11 @@ class Bot(commands.Bot):
             return
 
         command = get_command_from_message(message.content)
-        if command in ("!bot_on", "!bot_off") and message.author.name != BOT_NAME:
+        if command in ("!bot_on", "!bot_off", "!change_dota_id") and message.author.name != 'borsch_bot':
+            return
+
+        if command == "!change_dota_id" and len(message.content.split()) != 2:
+            await message.channel.send('An error occurred during !change_dota_id ')
             return
 
         if bot._is_online or command == "!bot_on":
@@ -157,14 +164,15 @@ class Bot(commands.Bot):
     async def change_dota_id(self, ctx : commands.Context):
         try:
             new_id = int(ctx.message.content.split()[1])
-            global DOTA_PLAYER_ID
-            DOTA_PLAYER_ID = new_id
-            await ctx.send('DONE')
+            response = OpenDota.change_player_id(new_id)
+            await ctx.send('DONE' if response else 'An error occurred during !change_dota_id ')
         except ValueError:
-            await ctx.send('Error occurred during !change_dota_id ')
+            await ctx.send('An error occurred during !change_dota_id ')
 
 
 if __name__ == '__main__':
+    # TODO самообновление истории матчей если 6 часов не было игр
+
     bot = Bot()
     print('start')
     bot.run()

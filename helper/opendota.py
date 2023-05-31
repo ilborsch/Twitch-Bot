@@ -97,6 +97,13 @@ class OpenDota:
         return bs.find('div', class_='rank-tier-wrapper')['title']
 
     @classmethod
+    def change_player_id(cls, new_id: int) -> bool:
+        if isinstance(new_id, int):
+            cls.init_session(new_id)
+            return True
+        return False
+
+    @classmethod
     def get_last_game(cls) -> Game:
         cls.__parse_player_games()
         return cls.__matches[0]
@@ -160,6 +167,7 @@ class OpenDota:
         del matches[0]
 
         for match in matches:
+            
             game = cls.__get_game_from_match_info(match)
             if game.match_id == cls.__last_match_before_stream.match_id:
                 break
