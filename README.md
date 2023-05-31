@@ -4,6 +4,8 @@
     <img src="https://img.shields.io/badge/TwitchIO%20v.-2.6.0-brightgreen" alt="TwitchIO version">
     <img src="https://img.shields.io/badge/Python-3.9-green" alt="Python version">
     <img src="https://img.shields.io/badge/License-MIT-yellow" alt="License">
+</p>
+<p align="center">
     <img src="https://srv4.imgonline.com.ua/result_img/imgonline-com-ua-Resize-2dw0DqERAH0.png">
 </p>
 
