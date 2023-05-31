@@ -148,7 +148,20 @@ class Bot(commands.Bot):
 
     @commands.command()
     async def bot_on(self, ctx: commands.Context):
-        await self.event_ready()
+        if not self._is_online:
+            await self.event_ready()
+        else:
+            await ctx.send('Bot is already working')
+
+    @commands.command()
+    async def change_dota_id(self, ctx : commands.Context):
+        try:
+            new_id = int(ctx.message.content.split()[1])
+            global DOTA_PLAYER_ID
+            DOTA_PLAYER_ID = new_id
+            await ctx.send('DONE')
+        except ValueError:
+            await ctx.send('Error occurred during !change_dota_id ')
 
 
 if __name__ == '__main__':
