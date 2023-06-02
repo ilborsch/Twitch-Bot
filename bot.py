@@ -1,18 +1,14 @@
 from twitchio.ext import commands
-from helper.opendota import OpenDota
+from helper.channel import Channel
 from asyncio import sleep
-from helper.routines import start_routines
 from random import randint, choice
-from helper.utils import get_command_from_message
+from helper.utils import get_command
 from config import (TMI_TOKEN, CLIENT_ID, BOT_NAME, BOT_PREFIX,
-                    CHANNEL, CLIENT_SECRET, DOTA_PLAYER_ID,
+                    CLIENT_SECRET, DOTA_PLAYER_ID,
                     VK, INSTAGRAM, STEAM, DONATE)
 
 
 class Bot(commands.Bot):
-    """
-        DEPLOYED ON PythonAnywhere.com
-    """
     def __init__(self):
         super().__init__(
             token=TMI_TOKEN,
@@ -20,7 +16,7 @@ class Bot(commands.Bot):
             client_secret=CLIENT_SECRET,
             nick=BOT_NAME,
             prefix=BOT_PREFIX,
-            initial_channels=[CHANNEL]
+            initial_channels=[BOT_NAME]
         )
         with open('info/banned-words.txt', 'r', encoding='utf8') as file:
             self.__BANNED_WORDS = file.read().split(', ')
@@ -28,153 +24,320 @@ class Bot(commands.Bot):
         with open('info/greetings.txt', 'r', encoding='utf8') as file:
             self.__GREETINGS = file.read().split(', ')
 
-        self._is_online = True
+        self.channels = dict()
+
+    @commands.command()
+    async def add_bot(self, ctx: commands.Context):
+        if ctx.channel.name == BOT_NAME:
+            if ctx.author.name not in self.channels:
+                new_channel = Channel()
+                await self._start_bot(ctx.author, new_channel)
+                await ctx.send('Success. Next step is to setup your bot.'
+                               ' Use !setup_help command to get further information. ')
+            else:
+                await ctx.send('Bot is already working.')
+
+    @commands.command()
+    async def delete_bot(self, ctx: commands.Context):
+        if ctx.channel.name == BOT_NAME:
+            if ctx.author.name not in self.channels:
+                await ctx.send("Bot is not working in your channel at the moment.")
+            else:
+                await self.part_channels([ctx.author.name])
+                await ctx.send('Success. Its a pity to miss you..')
+                self.channels.pop(ctx.author.name)
+
+    async def _start_bot(self, context_channel, new_channel):
+        await self.join_channels([context_channel.name])
+        self.channels[context_channel.name] = new_channel
 
     async def event_ready(self):
-        self._is_online = True
-        logged_text = f'Бот здесь и готов выполнять свой машинный долг! KonCha'
-        help_text = f'Ты можешь узнать что я умею с помощью команды !help VoHiYo'
-        enjoy_watching_text = f'Приятного просмотра! <3'
-
-        OpenDota.init_session(DOTA_PLAYER_ID)
-        channel = self.get_channel(CHANNEL)
-
-        start_routines(channel)
-        await channel.send(logged_text)
-        await sleep(1.5)
-        await channel.send(help_text)
-        await sleep(1.5)
-        await channel.send(enjoy_watching_text)
+        print(f'Logged in as: {self.nick}')
 
     async def event_message(self, message):
         if message.echo:
             return
 
-        command = get_command_from_message(message.content)
-        if command in ("!bot_on", "!bot_off", "!change_dota_id") and message.author.name != 'borsch_bot':
-            return
+        command = get_command(message.content)
+        lina_acceptable_commands = ('!setup_help', '!setup_donation', '!setup_dota', '!setup_socials', '!setup_steam', "!add_bot")
 
-        if command == "!change_dota_id" and len(message.content.split()) != 2:
-            await message.channel.send('An error occurred during !change_dota_id ')
-            return
-
-        if bot._is_online or command == "!bot_on":
-            content = message.content.lower()
-            for word in self.__BANNED_WORDS:
-                if word in content:
-                    await message.channel.send(f'{message.author.mention} не ругайся!  PunOko')
-                    break
-
+        if message.channel.name == BOT_NAME:
+            if message.author.name in self.channels and self.channels[message.author.name].is_complete():
+                await message.channel.send(f"{message.author.mention} Your setup is completed. You can now leave this page.")
+                return
+            if command not in lina_acceptable_commands:
+                message.content = '!bot_help'
             await self.handle_commands(message)
+            return
+
+        if command in ("!bot_on", "!bot_off", "!change_dota_id") and message.author.name != message.channel.name:
+            return
+
+        if self.channels[message.channel.name].is_online or command == "!bot_on":
+            await self.check_message(message)
+            await self.handle_commands(message)
+
+    async def check_message(self, message):
+        content = message.content.lower()
+        for word in self.__BANNED_WORDS:
+            if word in content:
+                await message.channel.send(f'{message.author.mention} не ругайся!  PunOko')
+                break
 
     @commands.command()
     async def help(self, ctx: commands.Context):
-        await ctx.send(f'''
-           KonCha Доступные команды - !help, !greet, !rank, !wr, !mmr, !last, !donate, !steam, !social. Спасибо что смотрите меня! <3
-        ''')
+        if self.channels[ctx.channel.name].is_complete():
+            await ctx.send(f'''
+               KonCha Доступные команды - !help, !greet, !rank, !wr, !mmr, !last, !donate, !steam, !social.
+               Спасибо что смотрите меня! <3
+            ''')
+        else:
+            await ctx.send(f"You can't use this command yet. Setup the bot in twitch.tv/linadotabot .")
 
     @commands.command()
     async def greet(self, ctx: commands.Context):
-        await ctx.send(f'{self.__GREETINGS[randint(0, len(self.__GREETINGS) - 1)]}, {ctx.author.name}!  KonCha')
+        if self.channels[ctx.channel.name].is_complete():
+            await ctx.send(f'{self.__GREETINGS[randint(0, len(self.__GREETINGS) - 1)]}, {ctx.author.name}!  KonCha')
+        else:
+            await ctx.send(f"You can't use this command yet. Setup the bot in twitch.tv/linadotabot .")
 
     @commands.command()
     async def donate(self, ctx: commands.Context):
-        await ctx.send(f'{ctx.author.mention} Поддержать меня: {DONATE}  TehePelo ')
+        channel = self.channels[ctx.channel.name]
+        if channel.is_complete():
+            await ctx.send(f'{ctx.author.mention} Поддержать меня: {channel.donate_link}  TehePelo ')
+        else:
+            await ctx.send(f"You can't use this command yet. Setup the bot in twitch.tv/linadotabot .")
 
     @commands.command()
     async def social(self, ctx: commands.Context):
-        await ctx.send(f'{ctx.author.mention} <3  Мой VK: {VK} , Instagram: {INSTAGRAM}')
+        channel = self.channels[ctx.channel.name]
+        if channel.is_complete():
+            socials = ' , '.join(channel.socials)
+            await ctx.send(f'{ctx.author.mention} <3  Ты можешь найти меня тут: {socials}')
+        else:
+            await ctx.send(f"You can't use this command yet. Setup the bot in twitch.tv/linadotabot .")
 
     @commands.command()
     async def steam(self, ctx: commands.Context):
-        await ctx.send(f'{ctx.author.mention} Мой Steam - {STEAM}  TPFufun')
+        channel = self.channels[ctx.channel.name]
+        if channel.is_complete():
+            await ctx.send(f'{ctx.author.mention} Мой Steam - {channel.steam_link}  TPFufun')
+        else:
+            await ctx.send(f"You can't use this command yet. Setup the bot in twitch.tv/linadotabot .")
 
     @commands.command()
     async def wr(self, ctx: commands.Context):
-        w, l = OpenDota.get_player_win_rate()
-        try:
-            wr = w / (w + l) * 100
-            message = f'Win Rate за сегодня - {int(wr)}%. ' \
-                      f' | {w} W - {l} L  {"PunOko" if wr < 50 else "PogChamp"} '
-        except ZeroDivisionError:
-            message = 'Сегодня не было сыграно ни одной игры.. PunOko'
-        await ctx.send(f'{ctx.author.mention} {message}')
+        if self.channels[ctx.channel.name].is_complete():
+            win, lose = self.channels[ctx.channel.name].opendota.get_player_win_rate()
+            try:
+                wr = win / (win + lose) * 100
+                message = f'Win Rate за сегодня - {int(wr)}%. ' \
+                          f' | {win} W - {lose} L  {"PunOko" if wr < 50 else "PogChamp"} '
+            except ZeroDivisionError:
+                message = 'Сегодня не было сыграно ни одной игры.. PunOko'
+            await ctx.send(f'{ctx.author.mention} {message}')
+        else:
+            await ctx.send(f"You can't use this command yet. Setup the bot in twitch.tv/linadotabot .")
 
     @commands.command()
     async def last(self, ctx: commands.Context):
-        try:
-            game = OpenDota.get_last_game()
-            k, d, a = game.KDA
-            game_result = 'ПОБЕДА VoteYea' if game.result.lower() == "won match" else "ПОРАЖЕНИЕ VoteNay"
-            message = f'{game_result}. Герой - {game.hero_name}, KDA - {k}/{d}/{a}.' \
-                      f' Игра длилась {game.duration}. Ссылка на игру: {game.match_link[12:]}'
-        except IndexError:
-            message = 'Сегодня не было сыграно ни одной игры.. PunOko'
-        await ctx.send(f'{ctx.author.mention} {message}')
+        if self.channels[ctx.channel.name].is_complete():
+            try:
+                game = self.channels[ctx.channel.name].opendota.get_last_game()
+                k, d, a = game.KDA
+                game_result = 'ПОБЕДА VoteYea' if game.result.lower() == "won match" else "ПОРАЖЕНИЕ VoteNay"
+                message = f'{game_result}. Герой - {game.hero_name}, KDA - {k}/{d}/{a}.' \
+                          f' Игра длилась {game.duration}. Ссылка на игру: {game.match_link[12:]}'
+            except IndexError:
+                message = 'Сегодня не было сыграно ни одной игры.. PunOko'
+            await ctx.send(f'{ctx.author.mention} {message}')
+        else:
+            await ctx.send(f"You can't use this command yet. Setup the bot in twitch.tv/linadotabot .")
 
     @commands.command()
     async def rank(self, ctx: commands.Context):
-        rank = OpenDota.get_player_rank()
-        await ctx.send(f'{ctx.author.mention} {rank}')
+        if self.channels[ctx.channel.name].is_complete():
+            rank = self.channels[ctx.channel.name].opendota.get_player_rank()
+            await ctx.send(f'{ctx.author.mention} {rank}')
+        else:
+            await ctx.send(f"You can't use this command yet. Setup the bot in twitch.tv/linadotabot .")
 
     @commands.command()
     async def mmr(self, ctx: commands.Context):
-        mmr1 = randint(0, 3000)
-        mmr2 = randint(1000, 4500)
-        mmr3 = randint(3000, 5500)
-        mmr4 = randint(4500, 6500)
-        mmr5 = randint(6500, 11000)
-        mmr = choice([mmr1, mmr2, mmr3, mmr4, mmr5])
+        if self.channels[ctx.channel.name].is_complete():
+            mmr1 = randint(0, 3000)
+            mmr2 = randint(1000, 4500)
+            mmr3 = randint(3000, 5500)
+            mmr4 = randint(4500, 6500)
+            mmr5 = randint(6500, 11000)
+            mmr = choice([mmr1, mmr2, mmr3, mmr4, mmr5])
 
-        name = ''
-        emoji = ''
+            name = ''
+            emoji = ''
 
-        if mmr <= 2000:
-            name = 'Поносище'
-            emoji = 'SMOrc'
-        elif mmr <= 4000:
-            name = 'Помойка'
-            emoji = 'TearGlove'
-        elif mmr <= 6500:
-            name = 'Игрок'
-            emoji = 'VoHiYo'
-        elif mmr <= 8500:
-            name = 'Красавчик'
-            emoji = 'B)'
-        elif mmr <= 11000:
-            name = 'БОГ'
-            emoji = 'PogChamp'
+            if mmr <= 2000:
+                name = 'Поносище'
+                emoji = 'SMOrc'
+            elif mmr <= 4000:
+                name = 'Помойка'
+                emoji = 'TearGlove'
+            elif mmr <= 6500:
+                name = 'Игрок'
+                emoji = 'VoHiYo'
+            elif mmr <= 8500:
+                name = 'Красавчик'
+                emoji = 'B)'
+            elif mmr <= 11000:
+                name = 'БОГ'
+                emoji = 'PogChamp'
 
-        await ctx.send(f'{ctx.author.mention}, Ты - {mmr} ммр {name} {emoji}')
+            await ctx.send(f'{ctx.author.mention}, Ты - {mmr} ммр {name} {emoji}')
+        else:
+            await ctx.send(f"You can't use this command yet. Setup the bot in twitch.tv/linadotabot .")
 
     @commands.command()
     async def bot_off(self, ctx: commands.Context):
-        OpenDota.clear_match_story()
+        if not self.channels[ctx.channel.name].is_complete():
+            await ctx.send(f"You can't use this command yet. Setup the bot in twitch.tv/linadotabot .")
+            return
+
+        self.channels[ctx.channel.name].opendota.clear_match_story()
+        self.channels[ctx.channel.name].is_online = False
         await ctx.send('OFF')
-        self._is_online = False
 
     @commands.command()
     async def bot_on(self, ctx: commands.Context):
-        if not self._is_online:
-            await self.event_ready()
-        else:
+        if not self.channels[ctx.channel.name].is_complete():
+            await ctx.send(f"You can't use this command yet. Setup the bot in twitch.tv/linadotabot .")
+            return
+
+        if self.channels[ctx.channel.name].is_online:
             await ctx.send('Bot is already working')
+            return
+
+        self.channels[ctx.channel.name].is_online = True
+        self.channels[ctx.channel.name].opendota.refresh_last_match()
+        await ctx.send('Bot is ready to work!')
 
     @commands.command()
-    async def change_dota_id(self, ctx : commands.Context):
-        try:
-            new_id = int(ctx.message.content.split()[1])
-            response = OpenDota.change_player_id(new_id)
+    async def change_dota_id(self, ctx: commands.Context, new_id: int):
+        if self.channels[ctx.channel.name].is_complete():
+            response = self.channels[ctx.channel.name].opendota.change_player_id(new_id)
+            if response:
+                self.channels[ctx.channel.name].dota_player_id = new_id
             await ctx.send('DONE' if response else 'An error occurred during !change_dota_id ')
-        except ValueError:
-            await ctx.send('An error occurred during !change_dota_id ')
+        else:
+            await ctx.send(f"You can't use this command yet. Setup the bot in twitch.tv/linadotabot .")
+
+    @commands.command()
+    async def change_steam(self, ctx: commands.Context, new_link: str):
+        if self.channels[ctx.channel.name].is_complete():
+            response = self.channels[ctx.channel.name].steam_link = new_link
+            await ctx.send('DONE' if response else 'An error occurred during !change_steam ')
+        else:
+            await ctx.send(f"You can't use this command yet. Setup the bot in twitch.tv/linadotabot .")
+
+    @commands.command()
+    async def change_donation(self, ctx: commands.Context, new_link: str):
+        if self.channels[ctx.channel.name].is_complete():
+            response = self.channels[ctx.channel.name].donate_link = new_link
+            await ctx.send('DONE' if response else 'An error occurred during !change_donation ')
+        else:
+            await ctx.send(f"You can't use this command yet. Setup the bot in twitch.tv/linadotabot .")
+
+    @commands.command()
+    async def change_socials(self, ctx: commands.Context, *socials):
+        if self.channels[ctx.channel.name].is_complete():
+            response = self.channels[ctx.channel.name].socials = socials
+            await ctx.send('DONE' if response else 'An error occurred during !change_socials ')
+        else:
+            await ctx.send(f"You can't use this command yet. Setup the bot in twitch.tv/linadotabot .")
+
+    @commands.command()
+    async def bot_help(self, ctx: commands.Context):
+        message = f"Hello! This is auto reply message. If you want to add the @linadotabot to your channel - " \
+                   f"firstly, use the !add_bot command. " \
+                   f"Afterwards, the @linadotabot will join your channel VoteYea! However, " \
+                   f"to use the bot should setup all variables we need. Your first step is to write !add_bot."
+
+        await ctx.send(message)
+
+    @commands.command()
+    async def setup_dota(self, ctx: commands.Context, dota_player_id: int):
+        if ctx.channel.name == BOT_NAME:
+            if ctx.author.name in self.channels:
+                self.channels[ctx.author.name].setup_dota(dota_player_id)
+                await ctx.send(f'Success. Your dota id is {dota_player_id}. '
+                               f'Now you are able to use commands !rank, !last, !wr. '
+                               f'Further information about all commands you can find in twitch.tv/linadotabot/about .')
+            else:
+                await ctx.send('You forgot to !add_bot :(')
+
+            if self.channels[ctx.author.name].is_complete():
+                await ctx.send('You are now able to use the bot! Congratulation! Good luck in your adventure! ')
+
+    @commands.command()
+    async def setup_socials(self, ctx: commands.Context, *socials):
+        if ctx.channel.name == BOT_NAME:
+            if ctx.author.name in self.channels:
+                for social in socials:
+                    self.channels[ctx.author.name].add_social(social)
+                await ctx.send(f'Success. '
+                               f'Now you are able to use command !social'
+                               f'Further information about all commands you can find in twitch.tv/linadotabot/about .')
+            else:
+                await ctx.send('You forgot to !add_bot :(')
+
+            if self.channels[ctx.author.name].is_complete():
+                await ctx.send('You are now able to use the bot! Congratulation! Good luck in your adventure! ')
+
+    @commands.command()
+    async def setup_steam(self, ctx: commands.Context, steam_link: str):
+        if ctx.channel.name == BOT_NAME:
+            if ctx.author.name in self.channels:
+                self.channels[ctx.author.name].setup_steam(steam_link)
+                await ctx.send(f'Success. Your steam link is: {steam_link} '
+                               f' Now you are able to use command !steam'
+                               f'Further information about all commands you can find in twitch.tv/linadotabot/about .')
+            else:
+                await ctx.send('You forgot to !add_bot :(')
+
+            if self.channels[ctx.author.name].is_complete():
+                await ctx.send('You are now able to use the bot! Congratulation! Good luck in your adventure! ')
+
+    @commands.command()
+    async def setup_donation(self, ctx: commands.Context, donation_link: str):
+        if ctx.channel.name == BOT_NAME:
+            if ctx.author.name in self.channels:
+                self.channels[ctx.author.name].setup_donation(donation_link)
+                await ctx.send(f'Success. Your donation link is: {donation_link}'
+                               f'Now you are able to use command !donate'
+                               f'Further information about all commands you can find in twitch.tv/linadotabot/about .')
+            else:
+                await ctx.send('You forgot to !add_bot :(')
+
+            if self.channels[ctx.author.name].is_complete():
+                await ctx.send('You are now able to use the bot! Congratulation! Good luck in your adventure! ')
+
+    @commands.command()
+    async def setup_help(self, ctx: commands.Context):
+        if ctx.channel.name == BOT_NAME:
+            if self.channels[ctx.author.name].is_complete():
+                await ctx.send('You are now able to use the bot! Congratulation! Good luck in your adventure! ')
+            else:
+                await ctx.send(f'To setup your bot and finally be able use the bot, '
+                               f' you need to use these 4 commands in ANY order: '
+                               r'!setup_donation {donation_link}, '
+                               r'!setup_steam {steam_link}, '
+                               r'!setup_dota {dota_player_id}, '
+                               r'!setup_socials {link1} {link2} {link3} ...')
 
 
-if __name__ == '__main__':
-    # TODO самообновление истории матчей если 6 часов не было игр
-
+def main():
     bot = Bot()
-    print('start')
     bot.run()
 
 
+if __name__ == '__main__':
+    main()

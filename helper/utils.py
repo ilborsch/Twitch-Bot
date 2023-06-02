@@ -30,7 +30,11 @@ def prettify(data) -> str:
     return json.dumps(data, indent=4)
 
 
-def get_command_from_message(message):
+def get_command(message):
     if len(message) and message[0] == '!':
         return message.split()[0]
+
+
+
+
 
