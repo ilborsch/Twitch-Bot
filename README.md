@@ -12,11 +12,20 @@
 ## Description
 
 
-Twitch Bot builded using TwitchIO asynchronous library. Project also contains DotaBuff scraper and OpenDota API parsing script which receive and process data needed for proper and efficient Bot work.
-Bot commands:
+Twitch Bot builded using TwitchIO asynchronous library. Project also contains DotaBuff scraper and OpenDota API parsing script which receive and process data needed for proper and efficient bot work.
+
+Add and setup bot commands ( twitch.tv/linadotabot chat)
+- !add_bot - Adds not functional bot to your channel. To make it fully functional you have to complete bot setup (4 commands below).
+- !setup_dota {DOTA_PLAYER_ID} - Setups connection with Dotabuff.com. 
+- !setup_socials {link1} {link2} ... - Setups your social links
+- !setup_steam {steam_link} - Setups your steam link
+- !setup_donation {donation_link} - Setups your donation link.
+- !setup_help - Help information about setup process.
+
+
+Bot global commands:
 
 - !help - Help information about available commands.
-- !greet - Greets chatter
 - !rank - Responds with streamer's rank
 - !wr - Responds with streamer's WinRate for the stream
 - !mmr - MMR randomizer. Funny command.
@@ -24,9 +33,17 @@ Bot commands:
 - !donate - Responds with donation info.
 - !steam - Responds with Steam account link.
 - !social - Responds with streamer's social links.
-- !bot_off - Turns bot OFF. (locks commands + cleans dota matches story. Needed to properly analyze stream data. )
-- !bot_on - Turns bot ON.
-- !change_dota_id {id} - changes Player dota id. 
+
+Only broadcaster available commands (Broadcaster chat):
+- !bot_off - Turns bot OFF. (Locks all commands + cleans dota matches story. )
+- !bot_on - Turns bot ON. (Unlocks all commands)
+- !remove_bot - Removes bot from your channel. You will be able to add it again.
+
+- !change_dota_id - Change Dota player ID. Recommended if you have changed dota account.
+- !change_steam - Changes steam link.
+- !change_donation - Changes donation link.
+- !change_socials - Changes your social links.
+
 
 Routines:
 
@@ -76,15 +93,7 @@ To run this project, you will need to add the following environment variables to
 
 `CHANNEL` - Channel which is used for the Bot
 
-`DOTA_PLAYER_ID` - Dota player ID 
-
-`VK` - VK page link (needed for command !social )
-
-`INSTAGRAM` - IG page link (needed for command !social )
-
-`STEAM` - Steam page link (needed for command !steam )
-
-`DONATE` - Donation page link (needed for command !donate )
+`DATABASE_URL` - Database URL (I use SQLite)
 
 
 
