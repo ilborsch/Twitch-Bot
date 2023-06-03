@@ -6,7 +6,7 @@
     <img src="https://img.shields.io/badge/License-MIT-yellow" alt="License">
 </p>
 <p align="center">
-    <img src="https://srv4.imgonline.com.ua/result_img/imgonline-com-ua-Resize-2dw0DqERAH0.png">
+    <img src="https://about-telegram.ru/wp-content/uploads/2018/03/karina-strimersha-telegram.png">
 </p>
 
 ## Description
