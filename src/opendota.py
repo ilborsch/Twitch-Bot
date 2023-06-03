@@ -1,7 +1,7 @@
 import requests_html
 import bs4
 from typing import Optional
-from helper.utils import MethodNotAllowedError, get_time_difference
+from src.utils import MethodNotAllowedError, get_time_difference
 
 
 class Game:

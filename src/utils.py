@@ -1,4 +1,6 @@
 from datetime import datetime
+from enum import Enum
+from googletrans import Translator
 import json
 
 
@@ -35,6 +37,24 @@ def get_command(message):
         return message.split()[0]
 
 
+def socials_to_string(socials: list) -> str:
+    return ' , '.join(socials)
 
 
+def socials_to_list(socials: str) -> list:
+    return socials.split(' , ')
 
+
+class Language(Enum):
+    Russian = "ru"
+    English = "en"
+
+
+def to_russian(english: str) -> str:
+    tr = Translator()
+    return tr.translate(english, dest='ru', src='en')
+
+
+def to_english(russian: str) -> str:
+    tr = Translator()
+    return tr.translate(russian, dest='en', src='ru')
