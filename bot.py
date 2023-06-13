@@ -1,13 +1,15 @@
 from twitchio.ext import commands
 from src.channel import Channel
+from asyncio import sleep
 from random import randint, choice
-from src.utils import get_command, socials_to_list
+from src.utils import get_command, socials_to_list, socials_to_string, Language
 from environment.config import TMI_TOKEN, CLIENT_ID, BOT_NAME, BOT_PREFIX, CLIENT_SECRET
 
 from environment.database import Session
 from environment.database import engine
 from environment.models import Channel as ChannelModel
 from environment.database import Base
+import json
 
 
 class Bot(commands.Bot):
@@ -23,6 +25,9 @@ class Bot(commands.Bot):
         with open('info/banned-words.txt', 'r', encoding='utf8') as file:
             self.__BANNED_WORDS = file.read().split(', ')
 
+        with open('info/phrases.json', 'r', encoding='utf8') as file:
+            self.phrases = json.load(file)
+
         self.channels = dict()
         self.session = Session()
 
@@ -31,40 +36,38 @@ class Bot(commands.Bot):
         if ctx.channel.name == BOT_NAME:
             if ctx.author.name not in self.channels:
                 new_channel = Channel()
-                await self._start_bot(ctx.author, new_channel)
-                await ctx.send('Success. Next step is to setup your bot.'
-                               ' Use !setup_help command to get further information. ')
+                channel_is_added = new_channel.add_to_database(self.session, ctx.author.name)
+                if channel_is_added:
+                    await self._start_bot(ctx.author, new_channel)
+                    await ctx.send("Success. Next step is to setup your bot. Use !setup_help command to continue.")
             else:
-                await ctx.send('Bot is already working.')
+                await ctx.send("It seems like you already have the bot.")
 
-    # @commands.command()
-    # async def set_language(self, ctx:commands.Context, language):
-    #     if "ru" in language or "ру" in language:
-    #         language = Language.Russian
-    #     elif "en" in language or "aнгл" in language:
-    #         language = Language.English
-    #     ChatterModel.update_language(self.session, ctx.author.name, new_language=language.value)
-    #     await ctx.send('Success!')
+    @commands.command()
+    async def me(self, ctx: commands.Context):
+        for chatter in ctx.chatters:
+            if chatter.name == ctx.author.name:
+                await ctx.send(f"{chatter.name}")
+                return
 
     @commands.command()
     async def remove_bot(self, ctx: commands.Context):
+        language = self.channels[ctx.channel.name].language_choice.value
         if ctx.channel.name not in (ctx.author.name, BOT_NAME):
             return
 
         for channel in ChannelModel.get_all(session=self.session):
             if channel.name == ctx.author.name:
-                await self.part_channels([ctx.author.name])
-
                 ChannelModel.delete_channel(
                     session=self.session,
                     channel_name=ctx.author.name
                 )
                 self.channels.pop(ctx.author.name)
-
-                await ctx.send('Success. Its a pity to miss you..')
+                await ctx.send(self.phrases['remove_bot'][language])
+                await self.part_channels([ctx.author.name])
                 break
         else:
-            await ctx.send("Bot is not working in your channel at the moment.")
+            await ctx.send(self.phrases['dont_have_bot'][language])
 
     async def _start_bot(self, context_channel, new_channel):
         await self.join_channels([context_channel.name])
@@ -74,8 +77,8 @@ class Bot(commands.Bot):
         for channel in ChannelModel.get_all(session=self.session):
             self.channels[channel.name] = Channel(
                 channel.dota_player_id,
-                channel.steam_link,
                 channel.donation_link,
+                channel.language_choice,
                 True,  # is_in_database
                 *socials_to_list(channel.socials)
             )
@@ -89,16 +92,18 @@ class Bot(commands.Bot):
             return
 
         command = get_command(message.content)
-        lina_acceptable_commands = ('!setup_help', '!setup_donation', '!setup_dota', '!setup_socials', '!setup_steam', "!add_bot")
+        ac = ("!add_bot", "!remove_bot", "!language", "!change_language", "!set_language")
 
-        if message.channel.name == BOT_NAME:
+        if message.channel.name.lower() == BOT_NAME.lower():
             if message.author.name in self.channels and self.channels[message.author.name].is_complete():
-                await message.channel.send(f"{message.author.mention} Your setup is completed. You can now leave this page.")
                 return
-            if command not in lina_acceptable_commands:
+            if command not in ac and "etup" not in command:
                 message.content = '!bot_help'
             await self.handle_commands(message)
             return
+        elif message.first and message.channel.name in self.channels:
+            language = self.channels[message.channel.name].language_choice.value
+            await message.channel.send(self.phrases['first'][language].format(message.author.mention))
 
         if self.channels[message.channel.name].is_online or command == "!bot_on":
             await self.check_message(message)
@@ -106,134 +111,131 @@ class Bot(commands.Bot):
 
     async def check_message(self, message):
         content = message.content.lower()
+        channel = await message.channel.user()
+        bot = await self.fetch_channel(BOT_NAME)
         for word in self.__BANNED_WORDS:
             if word in content:
-                await message.channel.send(f'{message.author.mention} не ругайся!  PunOko')
-                break
+                await message.channel.send(f'{message.author.mention} shut up!  PunOko')
+                # await channel.timeout_user(
+                #     moderator_id=bot.user.id,
+                #     user_id=message.author.id,
+                #     duration=1,
+                #     reason="Ban word",
+                #     token=TMI_TOKEN
+                # )
+                return
 
-    @commands.command()
+    @commands.command(aliases=("hel", "elp"))
     async def help(self, ctx: commands.Context):
-        if self.channels[ctx.channel.name].is_complete():
-            await ctx.send(f'''
-               KonCha Available commands - !help, !rank, !wr, !mmr, !last, !donate, !steam, !social.
-               Thanks for watching my stream! <3
-            ''')
-        else:
-            await ctx.send(f"You can't use this command yet. Setup the bot in twitch.tv/linadotabot .")
+        language = self.channels[ctx.channel.name].language_choice.value
+        await ctx.send(self.phrases['help'][language])
 
-    @commands.command()
+    @commands.command(aliases=("donat", "donation", "донат", "Donate", "DONATE", "donations"))
     async def donate(self, ctx: commands.Context):
         channel = self.channels[ctx.channel.name]
-        if channel.is_complete():
-            await ctx.send(f'{ctx.author.mention} Support me: {channel.donate_link}  TehePelo ')
+        language = channel.language_choice.value
+        if channel.has_donation_link():
+            await ctx.send(self.phrases['donate'][language].format(ctx.author.mention, channel.donate_link))
         else:
-            await ctx.send(f"You can't use this command yet. Setup the bot in twitch.tv/linadotabot .")
+            await ctx.send(self.phrases['donation_not_setup'][language])
 
-    @commands.command()
+    @commands.command(aliases=("socials", "ocials", "socia", "Social", "SOCIAL"))
     async def social(self, ctx: commands.Context):
+        language = self.channels[ctx.channel.name].language_choice.value
         channel = self.channels[ctx.channel.name]
-        if channel.is_complete():
-            socials = ' , '.join(channel.socials)
-            await ctx.send(f'{ctx.author.mention} <3  You can find me here: {socials}')
+        if channel.has_socials():
+            socials = ', '.join(channel.socials)
+            await ctx.send(self.phrases['social'][language].format(ctx.author.mention, socials))
         else:
-            await ctx.send(f"You can't use this command yet. Setup the bot in twitch.tv/linadotabot .")
+            await ctx.send(self.phrases['socials_not_setup'][language])
 
-    @commands.command()
-    async def steam(self, ctx: commands.Context):
-        channel = self.channels[ctx.channel.name]
-        if channel.is_complete():
-            await ctx.send(f'{ctx.author.mention} My steam - {channel.steam_link}  TPFufun')
-        else:
-            await ctx.send(f"You can't use this command yet. Setup the bot in twitch.tv/linadotabot .")
-
-    @commands.command()
+    @commands.command(aliases=("winrate", "winlose", "games", "wl", "wins", "винрейт", "Wr", "WR"))
     async def wr(self, ctx: commands.Context):
-        if self.channels[ctx.channel.name].is_complete():
+        language = self.channels[ctx.channel.name].language_choice.value
+        if self.channels[ctx.channel.name].has_dota_id():
             win, lose = self.channels[ctx.channel.name].opendota.get_player_win_rate()
             if win or lose:
                 message = f'W {win} - L {lose}. {"PunOko" if win <= lose else "PogChamp"}'
             else:
-                message = 'There were no games in today stream.. PunOko'
+                message = self.phrases['wr_no_games'][language]
             await ctx.send(f'{ctx.author.mention} {message}')
         else:
-            await ctx.send(f"You can't use this command yet. Setup the bot in twitch.tv/linadotabot .")
+            await ctx.send(self.phrases['dota_id_not_setup'][language])
 
-    @commands.command()
+    @commands.command(aliases=("last_game", "lastgame", "lastinfo", "ласт", "Last", "LAST"))
     async def last(self, ctx: commands.Context):
-        if self.channels[ctx.channel.name].is_complete():
+        language = self.channels[ctx.channel.name].language_choice.value
+        if self.channels[ctx.channel.name].has_dota_id():
             try:
                 game = self.channels[ctx.channel.name].opendota.get_last_game()
                 k, d, a = game.KDA
-                game_result = 'WIN VoteYea' if game.result.lower() == "won match" else "LOSE VoteNay"
-                message = f'{game_result}. Hero - {game.hero_name}, KDA - {k}/{d}/{a}.' \
-                          f' Duration - {game.duration}. Game: {game.match_link[12:]}'
+                if game.result.lower() == "won match":
+                    game_result = self.phrases['last_game_result_win'][language]
+                else:
+                    game_result = self.phrases['last_game_result_lose'][language]
+                message = self.phrases['last_game_info'][language].format(game_result, game.hero_name, k, d, a, game.duration, game.match_link[12:])
             except IndexError:
-                message = 'There were no games in today stream.. PunOko'
+                message = self.phrases['wr_no_games'][language]
             await ctx.send(f'{ctx.author.mention} {message}')
         else:
-            await ctx.send(f"You can't use this command yet. Setup the bot in twitch.tv/linadotabot .")
+            await ctx.send(self.phrases['dota_id_not_setup'][language])
 
-    @commands.command()
+    @commands.command(aliases=("rang", "ранг", "streamerrank", "mmr", "ммр", "Rank", "RANK"))
     async def rank(self, ctx: commands.Context):
-        if self.channels[ctx.channel.name].is_complete():
+        language = self.channels[ctx.channel.name].language_choice.value
+        if self.channels[ctx.channel.name].has_dota_id():
             rank = self.channels[ctx.channel.name].opendota.get_player_rank()
             await ctx.send(f'{ctx.author.mention} {rank}')
         else:
-            await ctx.send(f"You can't use this command yet. Setup the bot in twitch.tv/linadotabot .")
+            await ctx.send(self.phrases['dota_id_not_setup'][language])
 
-    @commands.command()
-    async def mmr(self, ctx: commands.Context):
-        if self.channels[ctx.channel.name].is_complete():
-            mmr1 = randint(0, 3000)
-            mmr2 = randint(1000, 4500)
-            mmr3 = randint(3000, 5500)
-            mmr4 = randint(4500, 6500)
-            mmr5 = randint(6500, 11000)
-            mmr = choice([mmr1, mmr2, mmr3, mmr4, mmr5])
+    @commands.command(aliases=("мойммр", "myrank", "Mymmr", "MYMMR"))
+    async def mymmr(self, ctx: commands.Context):
+        language = self.channels[ctx.channel.name].language_choice.value
+        mmr1 = randint(0, 3000)
+        mmr2 = randint(1000, 4500)
+        mmr3 = randint(3000, 5500)
+        mmr4 = randint(4500, 6500)
+        mmr5 = randint(6500, 11000)
+        mmr = choice([mmr1, mmr2, mmr3, mmr4, mmr5])
 
-            name = ''
-            emoji = ''
+        name = ''
+        emoji = ''
 
-            if mmr <= 2000:
-                name = 'noobie'
-                emoji = 'SMOrc'
-            elif mmr <= 4000:
-                name = 'wimp'
-                emoji = 'TearGlove'
-            elif mmr <= 6500:
-                name = 'player'
-                emoji = 'VoHiYo'
-            elif mmr <= 8500:
-                name = 'tough guy'
-                emoji = 'B)'
-            elif mmr <= 11000:
-                name = 'GOD'
-                emoji = 'PogChamp'
+        if mmr <= 2000:
+            name = 'noobie'
+            emoji = 'SMOrc'
+        elif mmr <= 4000:
+            name = 'wimp'
+            emoji = 'TearGlove'
+        elif mmr <= 6500:
+            name = 'player'
+            emoji = 'VoHiYo'
+        elif mmr <= 8500:
+            name = 'tough guy'
+            emoji = 'B)'
+        elif mmr <= 11000:
+            name = 'GOD'
+            emoji = 'PogChamp'
 
-            await ctx.send(f'{ctx.author.mention}, You are - {mmr} mmr {name} {emoji}')
-        else:
-            await ctx.send(f"You can't use this command yet. Setup the bot in twitch.tv/linadotabot .")
+        await ctx.send(self.phrases['mymmr'][language].format(ctx.author.mention, mmr, name, emoji))
 
     @commands.command()
     async def bot_off(self, ctx: commands.Context):
         if not ctx.author.name == ctx.channel.name:
             return
 
-        if not self.channels[ctx.channel.name].is_complete():
-            await ctx.send(f"You can't use this command yet. Setup the bot in twitch.tv/linadotabot .")
+        if not self.channels[ctx.channel.name].is_online:
+            await ctx.send('Bot is already off..')
             return
 
         self.channels[ctx.channel.name].opendota.clear_match_story()
         self.channels[ctx.channel.name].is_online = False
-        await ctx.send('OFF')
+        await ctx.send('Bot is OFF')
 
     @commands.command()
     async def bot_on(self, ctx: commands.Context):
         if not ctx.author.name == ctx.channel.name:
-            return
-
-        if not self.channels[ctx.channel.name].is_complete():
-            await ctx.send(f"You can't use this command yet. Setup the bot in twitch.tv/linadotabot .")
             return
 
         if self.channels[ctx.channel.name].is_online:
@@ -242,135 +244,167 @@ class Bot(commands.Bot):
 
         self.channels[ctx.channel.name].is_online = True
         self.channels[ctx.channel.name].opendota.refresh_last_match()
-        await ctx.send('Bot is ready to work!')
+        await ctx.send('Bot is ON!')
 
-    @commands.command()
+    @commands.command(aliases=("change_dota", "change_id"))
     async def change_dota_id(self, ctx: commands.Context, new_id: int):
+        language = self.channels[ctx.channel.name].language_choice.value
         if not ctx.author.name == ctx.channel.name:
             return
 
-        if self.channels[ctx.channel.name].is_complete():
+        if self.channels[ctx.channel.name].has_dota_id():
             response = self.channels[ctx.channel.name].opendota.change_player_id(new_id)
             if response:
                 self.channels[ctx.channel.name].dota_player_id = new_id
-            await ctx.send('DONE' if response else 'An error occurred during !change_dota_id ')
+                ChannelModel.update(
+                    session=self.session,
+                    name=ctx.author.name,
+                    dota_id=new_id
+                )
+            await ctx.send('DONE' if response else self.phrases['change_error'][language].format("!change_dota_id"))
         else:
-            await ctx.send(f"You can't use this command yet. Setup the bot in twitch.tv/linadotabot .")
+            await ctx.send(self.phrases['did_not_setup'][language])
 
-    @commands.command()
-    async def change_steam(self, ctx: commands.Context, new_link: str):
-        if not ctx.author.name == ctx.channel.name:
-            return
-
-        if self.channels[ctx.channel.name].is_complete():
-            response = self.channels[ctx.channel.name].steam_link = new_link
-            await ctx.send('DONE' if response else 'An error occurred during !change_steam ')
-        else:
-            await ctx.send(f"You can't use this command yet. Setup the bot in twitch.tv/linadotabot .")
-
-    @commands.command()
+    @commands.command(aliases=("change_donate", "change_donations", "change_donates"))
     async def change_donation(self, ctx: commands.Context, new_link: str):
+        language = self.channels[ctx.channel.name].language_choice.value
         if not ctx.author.name == ctx.channel.name:
             return
 
-        if self.channels[ctx.channel.name].is_complete():
+        if self.channels[ctx.channel.name].has_donation_link():
             response = self.channels[ctx.channel.name].donate_link = new_link
-            await ctx.send('DONE' if response else 'An error occurred during !change_donation ')
+            ChannelModel.update(
+                session=self.session,
+                name=ctx.author.name,
+                donation_link=new_link
+            )
+            await ctx.send('DONE' if response else self.phrases['change_error'][language].format("!change_donation"))
         else:
-            await ctx.send(f"You can't use this command yet. Setup the bot in twitch.tv/linadotabot .")
+            await ctx.send(self.phrases['did_not_setup'][language])
 
-    @commands.command()
+    @commands.command(aliases=("change_social", "change_soc"))
     async def change_socials(self, ctx: commands.Context, *socials):
+        language = self.channels[ctx.channel.name].language_choice.value
         if not ctx.author.name == ctx.channel.name:
             return
 
-        if self.channels[ctx.channel.name].is_complete():
+        if self.channels[ctx.channel.name].has_socials():
             response = self.channels[ctx.channel.name].socials = socials
-            await ctx.send('DONE' if response else 'An error occurred during !change_socials ')
+            ChannelModel.update(
+                session=self.session,
+                name=ctx.author.name,
+                socials=socials_to_string(list(socials))
+            )
+            await ctx.send('DONE' if response else self.phrases['change_error'][language].format("!change_socials"))
         else:
-            await ctx.send(f"You can't use this command yet. Setup the bot in twitch.tv/linadotabot .")
+            await ctx.send(self.phrases['did_not_setup'][language])
 
     @commands.command()
     async def bot_help(self, ctx: commands.Context):
-        message = f"Hello! This is auto reply message. If you want to add the @linadotabot to your channel - " \
-                   f" use the !add_bot command.Important - follow all instructions to setup the bot afterwards. :)"
-
-        await ctx.send(message)
+        language = self.channels[ctx.author.name].language_choice.value
+        await ctx.send(self.phrases['bot_help'][language])
 
     async def _check_setup_process(self, ctx: commands.Context):
         channel = self.channels[ctx.author.name]
-        channel_is_added = channel.add_to_database(self.session, ctx.author.name)
-        if channel_is_added or channel.is_in_database:
-            await ctx.send('You are now able to use the bot! Congratulation! Good luck in your adventure! ')
+        language = channel.language_choice.value
+        if channel.is_complete():
+            await ctx.send(self.phrases['check_setup_process_success'][language])
         else:
-            await ctx.send('You have some more steps left. In case you struggle, just use !setup_help.')
+            await ctx.send(self.phrases['check_setup_process_failure'][language])
 
-    @commands.command()
+    @commands.command(aliases=("setup_dota_id", "setup_id"))
     async def setup_dota(self, ctx: commands.Context, dota_player_id: int):
+        language = self.channels[ctx.author.name].language_choice.value
         if not ctx.channel.name == BOT_NAME:
             return
         if ctx.author.name in self.channels:
             self.channels[ctx.author.name].setup_dota(dota_player_id)
-            await ctx.send(f'Success. Your dota id is {dota_player_id}.')
+            ChannelModel.update(
+                session=self.session,
+                name=ctx.author.name,
+                dota_id=dota_player_id
+            )
+            await ctx.send(self.phrases['setup_success'][language])
         else:
-            await ctx.send('You forgot to !add_bot :(')
+            await ctx.send(self.phrases['setup_failure'][language])
 
         await self._check_setup_process(ctx)
 
-    @commands.command()
+    @commands.command(aliases=("setup_social", "setup_soc"))
     async def setup_socials(self, ctx: commands.Context, *socials):
+        language = self.channels[ctx.author.name].language_choice.value
         if not ctx.channel.name == BOT_NAME:
             return
         if ctx.author.name in self.channels:
             for social in socials:
                 self.channels[ctx.author.name].add_social(social)
-            await ctx.send(f'Success.')
+            ChannelModel.update(
+                session=self.session,
+                name=ctx.author.name,
+                socials=socials_to_string(list(socials))
+            )
+            await ctx.send(self.phrases['setup_success'][language])
         else:
-            await ctx.send('You forgot to !add_bot :(')
+            await ctx.send(self.phrases['setup_failure'][language])
 
         await self._check_setup_process(ctx)
 
-    @commands.command()
-    async def setup_steam(self, ctx: commands.Context, steam_link: str):
-        if not ctx.channel.name == BOT_NAME:
-            return
-        if ctx.author.name in self.channels:
-            self.channels[ctx.author.name].setup_steam(steam_link)
-            await ctx.send(f'Success. Your steam link is: {steam_link} ')
-        else:
-            await ctx.send('You forgot to !add_bot :(')
-
-        if self.channels[ctx.author.name].is_complete():
-            await ctx.send('You are now able to use the bot! Congratulation! Good luck in your adventure! ')
-
-        await self._check_setup_process(ctx)
-
-    @commands.command()
+    @commands.command(aliases=("setup_donate", "setup_donations", "setup_donates"))
     async def setup_donation(self, ctx: commands.Context, donation_link: str):
+        language = self.channels[ctx.author.name].language_choice.value
         if not ctx.channel.name == BOT_NAME:
             return
         if ctx.author.name in self.channels:
             self.channels[ctx.author.name].setup_donation(donation_link)
-            await ctx.send(f'Success. Your donation link is: {donation_link}')
+            ChannelModel.update(
+                session=self.session,
+                name=ctx.author.name,
+                donation_link=donation_link
+            )
+            await ctx.send(self.phrases['setup_success'][language])
         else:
-            await ctx.send('You forgot to !add_bot :(')
+            await ctx.send(self.phrases['setup_failure'][language])
 
         await self._check_setup_process(ctx)
 
-    @commands.command()
+    @commands.command(aliases=("setup_hel", "etup_help"))
     async def setup_help(self, ctx: commands.Context):
+        language = self.channels[ctx.author.name].language_choice.value
         if not ctx.channel.name == BOT_NAME:
             return
         if self.channels[ctx.author.name].is_complete():
-            await ctx.send('You are now able to use the bot! Congratulation! Good luck in your adventure! ')
+            await ctx.send(self.phrases['setup_completed'][language])
         else:
-            message = f"""
-                To setup the bot, you need to use 4 commands in ANY order.
-                Commands are: !setup_donation, !setup_steam, !setup_dota, !setup_socials.
-                More help and information about all commands
-                you can find under twitch.tv/linadotabot/about .  
-            """
-            await ctx.send(message)
+            await ctx.send(self.phrases['setup_help'][language])
+
+    @commands.command(aliases=("change_languag", "hange_language",
+                               "language", "set_language",
+                               "set_languag", "et_language"))
+    async def change_language(self, ctx: commands.Context, language_choice: str):
+        if ctx.channel.name not in (BOT_NAME, ctx.author.name):
+            return
+
+        language = self.channels[ctx.author.name].language_choice.value
+
+        if ctx.channel.name in self.channels or ctx.author.name in self.channels and ctx.channel.name == BOT_NAME:
+            if language_choice.lower() in ("ru", "russian", "rus", "russ", "russia", "ру", "русский", "рус", "русс"):
+                self.channels[ctx.author.name].language_choice = Language.Russian
+                ChannelModel.update(
+                    session=self.session,
+                    name=ctx.author.name,
+                    language_choice=Language.Russian.value
+                )
+                await ctx.send("Вы поставили Русский язык.")
+            elif language_choice.lower() in ("en", "eng", "english", "англ", "английский"):
+                self.channels[ctx.author.name].language_choice = Language.English
+                ChannelModel.update(
+                    session=self.session,
+                    name=ctx.author.name,
+                    language_choice=Language.English.value
+                )
+                await ctx.send("English has been set.")
+        else:
+            await ctx.send(self.phrases['setup_failure'][language])
 
 
 def main():
