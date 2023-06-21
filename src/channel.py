@@ -9,7 +9,7 @@ class Channel:
                  donate_link: Optional[str] = None,
                  language_choice: str = "en",
                  is_in_database: bool = False,
-                 *social_links):
+                 social_links: list = None):
 
         self.socials = social_links or []
         self.donate_link = donate_link

@@ -1,17 +1,18 @@
+from sqlalchemy.orm import Mapped, mapped_column
 from environment.database import Base
-from sqlalchemy import Column, String, Integer
+from sqlalchemy import String
 from src.utils import socials_to_string
 
 
 class Channel(Base):
     __tablename__ = "channel"
 
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False)
-    dota_player_id = Column(Integer, nullable=True)
-    donation_link = Column(String, nullable=True)
-    socials = Column(String, nullable=True)
-    language_choice = Column(String, default="en")
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(50), nullable=False)
+    dota_player_id: Mapped[int] = mapped_column(nullable=True)
+    donation_link: Mapped[str] = mapped_column(String(100), nullable=True)
+    socials: Mapped[str] = mapped_column(String(200), nullable=True)
+    language_choice: Mapped[str] = mapped_column(String(10), default="en")
 
     def __repr__(self):
         return f"<Channel(id={self.id}, name={self.name}, dota_id={self.dota_player_id})>"
