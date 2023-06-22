@@ -9,12 +9,12 @@
         "ru": "У вас на канале нету @TwitchDotaBot :("
     },
     "first": {
-        "en": "{0}, Hi! Welcome to my stream! Follow me and enjoy! <3",
-        "ru": "{0}, Привет! Добро пожаловать на мой канал! Нажимай фолоу и присаживайся поудобней! <3"
+        "en": "{0} Hi! Welcome to my stream! Follow me and enjoy! <3",
+        "ru": "{0} Привет! Добро пожаловать на мой канал! Нажимай фолоу и присаживайся поудобней! <3"
     },
     "help": {
-        "en": "{0}, KonCha My commands - !help, !rank, !wr, !mymmr, !last, !donate, !social.",
-        "ru": "{0}, KonCha Доступные команды - !help, !rank, !wr, !mymmr, !last, !donate, !social."
+        "en": "{0}, KonCha My commands - !help, !follow, !hero, !rank, !wr, !mymmr, !last, !donate, !social.",
+        "ru": "{0}, KonCha Доступные команды - !help, !follow, !hero, !rank, !wr, !mymmr, !last, !donate, !social."
     },
     "donate": {
         "en": "{0} Support me: {1}  TehePelo",

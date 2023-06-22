@@ -31,7 +31,7 @@ class Bot(commands.Bot):
         self.session = Session()
         self.start_routines()
 
-    @commands.command()
+    @commands.command(aliases=("ADD_BOT", "add", "ADD", "Add"))
     async def add_bot(self, ctx: commands.Context):
         if ctx.channel.name == BOT_NAME:
             if ctx.author.name not in self.channels:
@@ -57,7 +57,7 @@ class Bot(commands.Bot):
             follow_time = get_time_difference_from_date(result.followed_at, language)
             await ctx.send(self.phrases["follow_age"][language].format(ctx.author.mention, follow_time))
 
-    @commands.command()
+    @commands.command(aliases=("remove", "REMOVE", "REMOVE_BOT"))
     async def remove_bot(self, ctx: commands.Context):
         if ctx.channel.name not in (ctx.author.name, BOT_NAME):
             return
@@ -100,20 +100,23 @@ class Bot(commands.Bot):
 
         command = get_command(message.content)
 
-        if message.channel.name.lower() == BOT_NAME.lower():
-            if message.author.name in self.channels and self.channels[message.author.name].is_complete():
-                return
-            if command is None:
+        if message.channel.name == BOT_NAME:
+            if not self.is_valid_in_bot_chat(command):
                 message.content = '!bot_help'
+
+            message.content = message.content.replace('set', 'setup', 1)
             await self.handle_commands(message)
             return
-        elif message.first and message.channel.name in self.channels:
-            language = self.channels[message.channel.name].language_choice.value
-            await message.channel.send(self.phrases['first'][language].format(message.author.mention))
 
-        if self.channels[message.channel.name].is_online or command == "!bot_on":
-            await self.check_message(message)
-            await self.handle_commands(message)
+        elif message.channel.name in self.channels:
+            if message.first:
+                language = self.channels[message.channel.name].language_choice.value
+                await message.channel.send(self.phrases['first'][language].format(message.author.mention))
+
+            if self.channels[message.channel.name].is_online and self.is_valid_in_user_chat(command) or command == "!bot_on":
+                message.content = message.content.replace('set', 'change', 1)
+                await self.check_message(message)
+                await self.handle_commands(message)
 
     async def check_message(self, message):
         content = message.content.lower()
@@ -122,16 +125,16 @@ class Bot(commands.Bot):
         for word in self.__BANNED_WORDS:
             if word in content:
                 await message.channel.send(f'{message.author.mention} shut up!  PunOko')
-                await channel.timeout_user(
-                    moderator_id=bot.user.id,
-                    user_id=message.author.id,
-                    duration=1,
-                    reason="Ban word",
-                    token=TMI_TOKEN
-                )
+                # await channel.timeout_user(
+                #     moderator_id=bot.user.id,
+                #     user_id=message.author.id,
+                #     duration=15,
+                #     reason="Ban word",
+                #     token=TMI_TOKEN
+                # )
                 return
 
-    @commands.command(aliases=("hel", "elp"))
+    @commands.command(aliases=("hel", "elp", "HELP", "Help"))
     async def help(self, ctx: commands.Context):
         language = self.get_user_language(ctx)
         await ctx.send(self.phrases['help'][language].format(ctx.author.mention))
@@ -323,7 +326,7 @@ class Bot(commands.Bot):
         else:
             await ctx.send(self.phrases['check_setup_process_failure'][language])
 
-    @commands.command(aliases=("setup_dota_id", "setup_id", "set_dota", "set_dota_id"))
+    @commands.command(aliases=("setup_dota_id", "setup_id"))
     async def setup_dota(self, ctx: commands.Context, dota_player_id: int):
         if ctx.channel.name not in (BOT_NAME, ctx.author.name):
             return
@@ -346,7 +349,7 @@ class Bot(commands.Bot):
 
         await self._check_setup_process(ctx)
 
-    @commands.command(aliases=("setup_social", "setup_soc", "set_socials", "set_social"))
+    @commands.command(aliases=("setup_social", "setup_soc"))
     async def setup_socials(self, ctx: commands.Context, *socials):
         if ctx.channel.name not in (BOT_NAME, ctx.author.name):
             return
@@ -370,7 +373,7 @@ class Bot(commands.Bot):
 
         await self._check_setup_process(ctx)
 
-    @commands.command(aliases=("setup_donate", "setup_donations", "setup_donates", "set_donation", "set_donate"))
+    @commands.command(aliases=("setup_donate", "setup_donations", "setup_donates"))
     async def setup_donation(self, ctx: commands.Context, donation_link: str):
         if ctx.channel.name not in (BOT_NAME, ctx.author.name):
             return
@@ -393,7 +396,7 @@ class Bot(commands.Bot):
 
         await self._check_setup_process(ctx)
 
-    @commands.command(aliases=("setup_hel", "etup_help"))
+    @commands.command(aliases=("setup_hel", "etup_help", "setup"))
     async def setup_help(self, ctx: commands.Context):
         if ctx.channel.name not in (BOT_NAME, ctx.author.name):
             return
@@ -451,7 +454,7 @@ class Bot(commands.Bot):
         else:
             await ctx.send(self.phrases['dota_id_not_setup'][language].format(ctx.author.mention))
 
-    @commands.command(aliases=("Set_hero", "SET_HERO", "setup_hero", "Setup_hero"))
+    @commands.command(aliases=("Set_hero", "SET_HERO", "setup_hero", "Setup_hero", "change_hero", "Change_hero", "CHANGE_HERO"))
     async def set_hero(self, ctx: commands.Context, *hero_name):
         hero_name = ' '.join(hero_name)
         language = self.get_user_language(ctx)
@@ -484,6 +487,21 @@ class Bot(commands.Bot):
     def start_routines(self):
         self.donate_routine.start()
         self.update_dota_hero_routine.start()
+
+    @staticmethod
+    def is_valid_in_bot_chat(command):
+        if command is None:
+            return False
+        command = command.lower()
+        return "set" in command or "etup" in command or "hange" in command or \
+            command in ("!add_bot", "!remove_bot", "!add", "!remove", "!bot_on", "!bot_off")
+
+    @staticmethod
+    def is_valid_in_user_chat(command):
+        if command is None:
+            return False
+        command = command.lower()
+        return "hero" in command or ("etup" not in command)
 
 
 def main():
